@@ -6,36 +6,40 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Setup environment
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y bc bison flex libssl-dev make gcc g++ zip git wget curl python3
+          sudo apt install -y git wget unzip build-essential bc \
+            flex bison libssl-dev libncurses5-dev gcc-aarch64-linux-android
 
-      - name: Clone Xiaomi kernel (Android 10 source)
+      - name: Download Android NDK Toolchain
+        run: |
+          wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+          unzip android-ndk-r21e-linux-x86_64.zip -d ndk
+          echo "${{ github.workspace }}/ndk/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+
+      - name: Clone kernel sources
         run: |
           git clone --depth=1 -b dandelion-q-oss https://github.com/MiCode/Xiaomi_Kernel_OpenSource kernel
 
-      - name: Download GCC toolchain (AArch64)
-        run: |
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 gcc-arm64
-          echo "$GITHUB_WORKSPACE/gcc-arm64/bin" >> $GITHUB_PATH
-
-      - name: Configure kernel
+      - name: Configure kernel (using dandelion_defconfig)
         working-directory: kernel
         env:
           ARCH: arm64
-          SUBARCH: arm64
-          CROSS_COMPILE: ${{ github.workspace }}/gcc-arm64/bin/aarch64-linux-android-
+          CROSS_COMPILE: aarch64-linux-android-
         run: |
           make O=out dandelion_defconfig
 
-      - name: Apply NetHunter config
+      - name: Apply NetHunter tweaks (HID + Wi-Fi modules)
         working-directory: kernel
         env:
           ARCH: arm64
-          SUBARCH: arm64
-          CROSS_COMPILE: ${{ github.workspace }}/gcc-arm64/bin/aarch64-linux-android-
+          CROSS_COMPILE: aarch64-linux-android-
         run: |
           cat >> out/.config << 'EOF'
           CONFIG_USB_CONFIGFS=y
@@ -61,12 +65,11 @@ jobs:
         working-directory: kernel
         env:
           ARCH: arm64
-          SUBARCH: arm64
-          CROSS_COMPILE: ${{ github.workspace }}/gcc-arm64/bin/aarch64-linux-android-
+          CROSS_COMPILE: aarch64-linux-android-
         run: |
           make O=out -j$(nproc)
 
-      - name: Pack with AnyKernel3
+      - name: Pack AnyKernel3 ZIP
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
           cp kernel/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
