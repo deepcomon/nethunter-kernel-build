@@ -1,4 +1,4 @@
-name: Build NetHunter Kernel for Redmi 9A
+name: Build NetHunter Kernel for Redmi 9A (Android 10)
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ jobs:
           sudo apt update
           sudo apt install -y bc bison flex libssl-dev make gcc g++ zip git wget curl python3
 
-      - name: Clone Xiaomi kernel (dandelion-q-oss)
+      - name: Clone Xiaomi kernel (Android 10 source)
         run: |
           git clone --depth=1 -b dandelion-q-oss https://github.com/MiCode/Xiaomi_Kernel_OpenSource kernel
 
@@ -21,7 +21,7 @@ jobs:
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 gcc-arm64
           echo "$GITHUB_WORKSPACE/gcc-arm64/bin" >> $GITHUB_PATH
 
-      - name: Configure kernel (dandelion_defconfig)
+      - name: Configure kernel
         working-directory: kernel
         env:
           ARCH: arm64
@@ -30,22 +30,18 @@ jobs:
         run: |
           make O=out dandelion_defconfig
 
-      - name: Apply NetHunter config (HID + Wi-Fi modules)
+      - name: Apply NetHunter config
         working-directory: kernel
         env:
           ARCH: arm64
           SUBARCH: arm64
           CROSS_COMPILE: ${{ github.workspace }}/gcc-arm64/bin/aarch64-linux-android-
         run: |
-          # Создаём фрагмент с нужными настройками
-          cat > nethunter.config << 'EOF'
-          # USB HID gadget
+          cat >> out/.config << 'EOF'
           CONFIG_USB_CONFIGFS=y
           CONFIG_USB_CONFIGFS_HID=y
           CONFIG_USB_F_HID=m
           CONFIG_USB_G_HID=m
-
-          # Wi-Fi drivers for external adapters (monitor/injection)
           CONFIG_ATH9K_HTC=m
           CONFIG_RTL8187=m
           CONFIG_RTL8XXXU=m
@@ -55,15 +51,10 @@ jobs:
           CONFIG_MT7601U=m
           CONFIG_RT2800USB=m
           CONFIG_RT73USB=m
-
-          # Networking prerequisites
           CONFIG_PACKET=y
           CONFIG_NETFILTER=y
           CONFIG_NF_TABLES=y
           EOF
-
-          # Сливаем фрагмент в текущий .config и обновляем
-          cat nethunter.config >> out/.config || true
           yes "" | make O=out olddefconfig
 
       - name: Build kernel
@@ -78,13 +69,12 @@ jobs:
       - name: Pack with AnyKernel3
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
-          # Копируем собранное ядро; для этого девайса достаточно Image.gz-dtb
           cp kernel/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
           cd AnyKernel3
-          zip -r9 "kernel-nethunter deepcomon (dandelion).zip" * -x .git* README*
+          zip -r9 "kernel-nethunter-dandelion-android10.zip" * -x .git* README*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-nethunter deepcomon (dandelion)
-          path: AnyKernel3/kernel-nethunter deepcomon (dandelion).zip
+          name: kernel-nethunter-dandelion-android10
+          path: AnyKernel3/kernel-nethunter-dandelion-android10.zip
