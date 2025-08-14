@@ -1,4 +1,4 @@
-name: Build NetHunter Kernel for Redmi 9A (Android 10)
+name: Build NetHunter Kernel for Redmi 9A
 
 on:
   workflow_dispatch:
@@ -9,40 +9,31 @@ jobs:
 
     steps:
     - name: Checkout source
-      uses: actions/checkout@v4
+      uses: actions/checkout@v3
 
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y bc bison flex libssl-dev make \
-        gcc clang libncurses-dev wget unzip python3 git zip openjdk-11-jre-headless curl
-
-    - name: Set build date
-      run: echo "BUILD_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+        sudo apt install -y git wget curl unzip build-essential bc \
+          flex bison libssl-dev libncurses5-dev crossbuild-essential-arm64
 
     - name: Download Android NDK
       run: |
+        cd $HOME
         wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
         unzip android-ndk-r25c-linux.zip
-        mv android-ndk-r25c $HOME/android-ndk
+        mv android-ndk-r25c android-ndk
 
     - name: Ensure configs directory exists
-      run: mkdir -p arch/arm64/configs/
+      run: mkdir -p arch/arm64/configs
 
-    - name: Auto-find and download nethunter_defconfig
+    - name: Auto-find and download defconfig
       run: |
-        echo "🔍 Ищем dandelion_defconfig..."
         FILE_URL=$(curl -s https://api.github.com/repos/MiCode/Xiaomi_Kernel_OpenSource/contents/arch/arm64/configs?ref=dandelion-q-oss \
           | grep '"download_url":' \
           | grep dandelion_defconfig \
           | cut -d '"' -f 4)
 
-        if [ -z "$FILE_URL" ]; then
-          echo "❌ Не удалось найти dandelion_defconfig в репозитории Xiaomi."
-          exit 1
-        fi
-
-        echo "✅ Найден: $FILE_URL"
         wget "$FILE_URL" -O arch/arm64/configs/nethunter_defconfig
 
     - name: Build kernel
@@ -51,50 +42,19 @@ jobs:
         make O=out ARCH=arm64 nethunter_defconfig
         make -j$(nproc) O=out ARCH=arm64 \
           CC=clang \
-          CROSS_COMPILE=aarch64-linux-gnu- \
-          CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-
-    - name: Verify kernel build success
-      run: |
-        if [ ! -f out/arch/arm64/boot/Image.gz-dtb ]; then
-          echo "❌ Ошибка: файл ядра Image.gz-dtb не найден."
-          exit 1
-        fi
+          CROSS_COMPILE=aarch64-linux-android- \
+          CROSS_COMPILE_ARM32=arm-linux-androideabi-
 
     - name: Prepare AnyKernel3 ZIP
       run: |
-        git clone https://github.com/osm0sis/AnyKernel3
+        git clone https://github.com/osm0sis/AnyKernel3.git
         cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
         cd AnyKernel3
-        zip -r9 ../NetHunter-Redmi9A-${BUILD_DATE}-unsigned.zip ./*
+        zip -r9 ../nethunter_kernel.zip *
 
-    - name: Download testkeys for signing
-      run: |
-        wget https://raw.githubusercontent.com/apkmirror/ApkSignatureTools/master/testkey.x509.pem
-        wget https://raw.githubusercontent.com/apkmirror/ApkSignatureTools/master/testkey.pk8
-
-    - name: Download signapk tool
-      run: |
-        wget https://raw.githubusercontent.com/lineageos/android_build/master/tools/signapk/signapk.jar
-
-    - name: Sign flashable ZIP
-      run: |
-        java -jar signapk.jar testkey.x509.pem testkey.pk8 NetHunter-Redmi9A-${BUILD_DATE}-unsigned.zip NetHunter-Redmi9A-${BUILD_DATE}.zip
-
-    - name: Upload artifact to Actions
-      uses: actions/upload-artifact@v4
-      with:
-        name: NetHunter-Redmi9A-${{ env.BUILD_DATE }}
-        path: NetHunter-Redmi9A-${{ env.BUILD_DATE }}.zip
-
-    - name: Publish to GitHub Releases
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ env.BUILD_DATE }}
-        name: "NetHunter Kernel for Redmi 9A - ${{ env.BUILD_DATE }}"
-        body: |
-          Автоматическая сборка ядра NetHunter для Redmi 9A (Android 10)
-          Дата сборки: ${{ env.BUILD_DATE }}
-        files: NetHunter-Redmi9A-${{ env.BUILD_DATE }}.zip
+        files: nethunter_kernel.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
