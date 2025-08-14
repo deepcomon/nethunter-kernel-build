@@ -1,60 +1,15 @@
-name: Build NetHunter Kernel for Redmi 9A
+- name: Auto-find and download defconfig
+  run: |
+    echo "🔍 Ищем dandelion_defconfig..."
+    FILE_URL=$(curl -s https://api.github.com/repos/MiCode/Xiaomi_Kernel_OpenSource/contents/arch/arm64/configs?ref=dandelion-q-oss \
+      | grep '"download_url":' \
+      | grep dandelion_defconfig \
+      | cut -d '"' -f 4)
 
-on:
-  workflow_dispatch:
+    if [ -z "$FILE_URL" ]; then
+      echo "❌ Не удалось найти dandelion_defconfig в репозитории Xiaomi."
+      exit 1
+    fi
 
-jobs:
-  build:
-    runs-on: ubuntu-22.04
-
-    steps:
-    - name: Checkout source
-      uses: actions/checkout@v3
-
-    - name: Install dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y git wget curl unzip build-essential bc \
-          flex bison libssl-dev libncurses5-dev crossbuild-essential-arm64
-
-    - name: Download Android NDK
-      run: |
-        cd $HOME
-        wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
-        unzip android-ndk-r25c-linux.zip
-        mv android-ndk-r25c android-ndk
-
-    - name: Ensure configs directory exists
-      run: mkdir -p arch/arm64/configs
-
-    - name: Auto-find and download defconfig
-      run: |
-        FILE_URL=$(curl -s https://api.github.com/repos/MiCode/Xiaomi_Kernel_OpenSource/contents/arch/arm64/configs?ref=dandelion-q-oss \
-          | grep '"download_url":' \
-          | grep dandelion_defconfig \
-          | cut -d '"' -f 4)
-
-        wget "$FILE_URL" -O arch/arm64/configs/nethunter_defconfig
-
-    - name: Build kernel
-      run: |
-        export PATH=$HOME/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
-        make O=out ARCH=arm64 nethunter_defconfig
-        make -j$(nproc) O=out ARCH=arm64 \
-          CC=clang \
-          CROSS_COMPILE=aarch64-linux-android- \
-          CROSS_COMPILE_ARM32=arm-linux-androideabi-
-
-    - name: Prepare AnyKernel3 ZIP
-      run: |
-        git clone https://github.com/osm0sis/AnyKernel3.git
-        cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-        cd AnyKernel3
-        zip -r9 ../nethunter_kernel.zip *
-
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: nethunter_kernel.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    echo "✅ Скачали конфигурацию: $FILE_URL"
+    wget "$FILE_URL" -O arch/arm64/configs/nethunter_defconfig
