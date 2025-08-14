@@ -9,7 +9,7 @@ jobs:
 
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Install dependencies
       run: |
@@ -61,7 +61,7 @@ jobs:
         java -jar signapk.jar testkey.x509.pem testkey.pk8 NetHunter-Redmi9A-${BUILD_DATE}-unsigned.zip NetHunter-Redmi9A-${BUILD_DATE}.zip
 
     - name: Upload signed flashable ZIP
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: NetHunter-Redmi9A-${{ env.BUILD_DATE }}
         path: NetHunter-Redmi9A-${{ env.BUILD_DATE }}.zip
